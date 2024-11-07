@@ -99,6 +99,24 @@ int main( void ) {
 
         if (startsWith(commandBuffer, "сохранить")) {
             char buffer[512] = {0};
+            bool isDot = false;
+
+            printf("    Формат? ([c]b, [d]ot) ");
+            fgets(buffer, sizeof(buffer), stdin);
+
+            if (buffer[0] == 'c') {
+                isDot = false;
+            } else if (buffer[0] == 'd') {
+                isDot = true;
+            } else {
+                const size_t len = strlen(buffer);
+                if (len > 0)
+                    buffer[len - 1] = '\0';
+
+                printf("    неизвестный формат: %s", buffer);
+                continue;
+            }
+
 
             printf("    Путь? ");
             fgets(buffer, sizeof(buffer), stdin);
@@ -112,7 +130,12 @@ int main( void ) {
                 printf("    Ошибка открытия файла: %s\n", strerror(errno));
                 continue;
             }
-            cbDump(file, cb);
+
+            if (isDot) {
+                cbDumpDot(file, cb);
+            } else {
+                cbDump(file, cb);
+            }
             fclose(file);
 
             continue;

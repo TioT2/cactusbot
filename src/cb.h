@@ -83,6 +83,14 @@ bool cbIterFinished( const CbIter *entry );
 bool cbIterInsertCorrect( CbIter *entry, const char *condition, const char *correct );
 
 /**
+ * @brief CF dot text dumping function
+ * 
+ * @param[out] out  destination file
+ * @param[in]  self self pointer
+ */
+void cbDumpDot( FILE *out, const Cb self );
+
+/**
  * @brief CF text dumping function
  * 
  * @param[out] out  destination file

@@ -340,4 +340,35 @@ bool cbParse( const char *const str, Cb *const dst ) {
     return true;
 } // cbParse
 
+void cbDumpNodeDot( FILE *out, const CbNode *node, size_t *const nodeId ) {
+    const size_t currId = (*nodeId)++;
+
+    fprintf(out, "    node%zu [label = \"%s", currId, node->text);
+    if (node->isLeaf)
+        fprintf(out, "\", shape = box");
+    else
+        fprintf(out, "?\"");
+    fprintf(out, "];\n");
+
+    if (!node->isLeaf) {
+        const size_t correctId = *nodeId;
+        cbDumpNodeDot(out, node->interior.correct, nodeId);
+
+        const size_t incorrectId = *nodeId;
+        cbDumpNodeDot(out, node->interior.incorrect, nodeId);
+
+        fprintf(out, "    node%zu -> node%zu [label = \"T\"];\n", currId, correctId);
+        fprintf(out, "    node%zu -> node%zu [label = \"F\"];\n", currId, incorrectId);
+    }
+} // cbDumpNodeDot
+
+void cbDumpDot( FILE *out, const Cb self ) {
+    size_t nodeId = 0;
+
+    fprintf(out, "digraph {\n");
+    cbDumpNodeDot(out, self->treeRoot, &nodeId);
+    fprintf(out, "}");
+
+} // cbDumpDot
+
 // cb.c
