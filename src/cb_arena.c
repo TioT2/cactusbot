@@ -26,23 +26,19 @@ struct __CbArenaAllocation {
 /// @brief arena implementation structure
 typedef struct __CbArenaImpl {
     CbArenaAllocation *allocations; ///< arena allocations stack
-    void *curr;                     ///< current block pointer
-    void *end;                      ///< block end pointer
+    void              *curr;        ///< current block pointer
+    void              *end;         ///< block end pointer
 } CbArenaImpl;
 
 CbArena cbArenaCtor( void ) {
-    CbArenaImpl *impl = (CbArenaImpl *)calloc(sizeof(CbArenaImpl), 1);
+    // building uroboros
+    CbArenaImpl impl = {0};
+    CbArena arena = NULL;
 
-    if (impl == NULL)
-        return NULL;
-    
-    *impl = (CbArenaImpl) {
-        .allocations = NULL,
-        .curr        = NULL,
-        .end         = NULL,
-    };
+    if ((arena = (CbArena)cbArenaAlloc(&impl, sizeof(CbArenaImpl))) != NULL)
+        *arena = impl;
 
-    return impl;
+    return arena;
 } // cbArenaCtor
 
 void cbArenaDtor( CbArena const arena ) {
@@ -50,13 +46,11 @@ void cbArenaDtor( CbArena const arena ) {
         return;
 
     CbArenaAllocation *allocation = arena->allocations;
-
     while (allocation != NULL) {
         CbArenaAllocation *const next = allocation->next;
         free(allocation);
         allocation = next;
     }
-    free(arena);
 } // cbArenaDtor
 
 /**

@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include "cb.h"
 
@@ -77,6 +78,54 @@ bool utf8StrLength( const char *str, size_t *dst ) {
     }
 }
 
+/**
+ * @brief help printing function
+ */
+void cliPrintHelp( void ) {
+    puts(
+        "    помощь     - вывести это меню \n"
+        "    выход      - выйти из программы \n"
+        "    вывести    - вывести всё дерево данных \n"
+        "    сохранить  - сохранить дерево в файл \n"
+        "    загрузить  - загрузить дерево из файла \n"
+        "    начать     - начать проход по дереву \n"
+        "    определить - вывести определение объекта согласно дереву\n"
+    );
+} // cliPrintHelp
+
+/**
+ * @brief debug help printing function
+ */
+void cliPrintDbgHelp( void ) {
+    puts(
+        "    сохранитьЛистовоеДерево - сохранить внутреннее дерево, построенное для оптимизации поиска листьев, в файл.\n"
+    );
+} // cliPrintDbgHelp
+
+/**
+ * @brief CLI file opening 'menu'
+ * 
+ * @param[in] mode file opening mode
+ * 
+ * @return file pointer. NULL if something went wrong.
+ */
+FILE * cliOpenFile( const char *mode ) {
+    char pathBuffer[512] = {0};
+    const size_t pathBufferSize = sizeof(pathBuffer);
+
+    printf("    Путь? ");
+    fgets(pathBuffer, pathBufferSize, stdin);
+
+    const size_t len = strlen(pathBuffer);
+    if (len > 0)
+        pathBuffer[len - 1] = '\0';
+
+    FILE *file = fopen(pathBuffer, mode);
+    if (file == NULL)
+        printf("    Ошибка открытия файла: %s\n", strerror(errno));
+    return file;
+} // cliOpenFile
+
 int main( void ) {
     Cb cb = cbCtor("пустота");
 
@@ -117,19 +166,9 @@ int main( void ) {
                 continue;
             }
 
-
-            printf("    Путь? ");
-            fgets(buffer, sizeof(buffer), stdin);
-
-            const size_t len = strlen(buffer);
-            if (len > 0)
-                buffer[len - 1] = '\0';
-
-            FILE *file = fopen(buffer, "w");
-            if (file == NULL) {
-                printf("    Ошибка открытия файла: %s\n", strerror(errno));
+            FILE *file = cliOpenFile("w");
+            if (file == NULL)
                 continue;
-            }
 
             if (isDot) {
                 cbDumpDot(file, cb);
@@ -142,21 +181,9 @@ int main( void ) {
         }
 
         if (startsWith(commandBuffer, "загрузить")) {
-            char buffer[512] = {0};
-
-            printf("    Путь? ");
-            fgets(buffer, sizeof(buffer), stdin);
-
-            const size_t len = strlen(buffer);
-            if (len > 0)
-                buffer[len - 1] = '\0';
-
-            FILE *file = fopen(buffer, "r");
-            if (file == NULL) {
-                printf("    Ошибка открытия файла: %s\n", strerror(errno));
+            FILE *file = cliOpenFile("r");
+            if (file == NULL)
                 continue;
-            }
-
 
             fseek(file, 0, SEEK_END);
             size_t size = ftell(file);
@@ -227,7 +254,72 @@ int main( void ) {
             continue;
         }
 
+        if (startsWith(commandBuffer, "определить")) {
+            char buffer[512];
+
+            printf("    Что определить? ");
+            fgets(buffer, sizeof(buffer), stdin);
+            const size_t len = strlen(buffer);
+            if (len != 0)
+                buffer[len - 1] = '\0';
+
+            CbDefIter iter = {0};
+            CbDefineStatus status = cbDefine(cb, buffer, &iter);
+
+            switch (status) {
+            case CB_DEFINE_STATUS_OK: {
+                bool first = true;
+
+                printf("    %s - это то, что ");
+
+                do {
+                    printf("%s%s%s",
+                        first
+                            ? ""
+                            : ", ",
+                        cbDefIterGetRelation(&iter)
+                            ? ""
+                            : "не ",
+                        cbDefIterGetProperty(&iter)
+                    );
+                    first = false;
+                } while (cbDefIterNext(&iter));
+                printf("\n");
+
+                break;
+            }
+
+            case CB_DEFINE_STATUS_NO_DEFINITION: {
+                printf("    У \"%s\" нет определения.", buffer);
+                break;
+            }
+
+            case CB_DEFINE_STATUS_NO_SUBJECT: {
+                printf("    \"%s\" неизвестен.", buffer);
+                break;
+            }
+            }
+
+            continue;
+        }
+
+        // debug command set
+        if (commandBuffer[0] == '!') {
+            if (startsWith(commandBuffer + 1, "сохранитьЛистовоеДерево")) {
+                FILE *file = cliOpenFile("w");
+                if (file == NULL)
+                    continue;
+                cbDbgLeafTreeDumpDot(file, cb);
+                fclose(file);
+            } else {
+                cliPrintDbgHelp();
+            }
+
+            continue;
+        }
+
         printf("    неизвестная комманда: %s\n", commandBuffer);
+        cliPrintHelp();
     }
 
     cbDtor(cb);

@@ -10,12 +10,13 @@
 #include "cb.h"
 #include "cb_arena.h"
 
-
+/// @brief constant string slice
 typedef struct __CbStr {
-    const char *begin;
-    const char *end;
+    const char *begin; ///< stirng slice begin (inclusive)
+    const char *end;   ///< string slice end (exclusive)
 } CbStr;
 
+/// @brief string slice from constant string construction macro.
 #define CB_STR(str) ((CbStr) { (const char *)(str), (const char *)(str) + strlen((str)) })
 
 /// @brief node structure forward declaration
@@ -90,9 +91,11 @@ Cb cbCtor( const char *rootEntry ) {
     node->isLeaf = true;
 
     impl->treeRoot = node;
-    impl->leafTreeRoot = node;
-
     impl->treeSize = 1;
+
+    impl->leafTreeRoot = node;
+    impl->leafTreeSize = 1;
+
 
     return impl;
 } // cbCtor
@@ -101,6 +104,29 @@ void cbDtor( Cb self ) {
     if (self != NULL)
         cbArenaDtor(self->arena); // self is allocated by self->arena
 } // cbDtor
+
+/**
+ * @brief node pointer in leaf tree searching function
+ * 
+ * @param[in] root leaf tree root (non-null)
+ * @param[in] name leaf to insert name, non-null
+ * 
+ * @return (non-null) pointer to place to where node with 'name' name should be located.
+ */
+CbNode ** cbLeafTreeFind( CbNode **root, const char *name ) {
+    while (*root != NULL) {
+        const int cmp = strcmp(name, (*root)->text);
+
+        if (cmp > 0)
+            root = &(*root)->leaf.left;
+        else if (cmp < 0)
+            root = &(*root)->leaf.right;
+        else
+            return root;
+    }
+
+    return root;
+} // cbLeafTreeInsert
 
 CbIter cbIter( Cb const self ) {
     return (CbIter) {
@@ -134,6 +160,11 @@ bool cbIterFinished( const CbIter *entry ) {
 bool cbIterInsertCorrect( CbIter *entry, const char *condition, const char *correct ) {
     if (!(*entry->node)->isLeaf)
         return false;
+    
+    CbNode **leafTreeDst = cbLeafTreeFind(&entry->self->leafTreeRoot, correct);
+
+    if (*leafTreeDst != NULL) // leaf is already added
+        return false;
 
     CbNode *conditionNode = cbAllocNode(entry->self->arena, CB_STR(condition));
     CbNode *correctNode = cbAllocNode(entry->self->arena, CB_STR(correct));
@@ -151,6 +182,8 @@ bool cbIterInsertCorrect( CbIter *entry, const char *condition, const char *corr
     correctNode->parent = conditionNode;
 
     *entry->node = conditionNode;
+
+    *leafTreeDst = correctNode;
 
     entry->self->treeSize += 2;
 
@@ -238,7 +271,7 @@ static bool cbNextToken( CbStr *const str, CbToken *const dst ) {
         while (str->begin < str->end && *str->begin != '\"')
             str->begin++;
 
-        dst->string = {strBegin, str->begin};
+        dst->string = (CbStr) {strBegin, str->begin};
         str->begin++;
         dst->type = CB_TOKEN_STRING;
 
@@ -253,7 +286,7 @@ static bool cbNextToken( CbStr *const str, CbToken *const dst ) {
 /**
  * @brief node parsing function
  */
-size_t cbParseNode( CbStr *const rest, CbArena arena, CbNode **dst ) {
+size_t cbParseNode( CbStr *const rest, CbArena arena, CbNode **dst, CbNode **leafTreeRoot, size_t *leafTreeSize ) {
     CbToken token = {};
 
     if (!cbNextToken(rest, &token))
@@ -272,8 +305,8 @@ size_t cbParseNode( CbStr *const rest, CbArena arena, CbNode **dst ) {
         if (false
             || !cbNextToken(rest, &identToken)
             || identToken.type != CB_TOKEN_STRING
-            || (correctCount   = cbParseNode(rest, arena, &correct  ))  == 0
-            || (incorrectCount = cbParseNode(rest, arena, &incorrect))  == 0
+            || (correctCount   = cbParseNode(rest, arena, &correct  , leafTreeRoot, leafTreeSize))  == 0
+            || (incorrectCount = cbParseNode(rest, arena, &incorrect, leafTreeRoot, leafTreeSize))  == 0
             || (node           = cbAllocNode(arena, identToken.string)) == NULL
             || !cbNextToken(rest, &rightBracketToken)
             || rightBracketToken.type != CB_TOKEN_RIGHT_BRACKET
@@ -297,12 +330,21 @@ size_t cbParseNode( CbStr *const rest, CbArena arena, CbNode **dst ) {
     }
 
     case CB_TOKEN_STRING: {
-        CbNode *node = (CbNode *)cbAllocNode(arena, token.string);
-        if (node == NULL)
+        CbNode *node = NULL;
+        CbNode **leafTreeDst = NULL;
+
+        if (false
+            || (node = (CbNode *)cbAllocNode(arena, token.string)) == NULL
+            || *(leafTreeDst = cbLeafTreeFind(leafTreeRoot, node->text)) != NULL
+        )
             return 0;
+
         node->isLeaf = true;
+        (*leafTreeSize)++;
 
         *dst = node;
+        *leafTreeDst = node;
+
         return 1;
     }
     }
@@ -314,13 +356,18 @@ bool cbParse( const char *const str, Cb *const dst ) {
     CbStr text = CB_STR(str);
 
     CbArena arena = NULL;
-    CbNode *node = NULL;
-    size_t size = 0;
+
+    CbNode * treeRoot = NULL;
+    size_t   treeSize = 0;
+
+    CbNode * leafTreeRoot = NULL;
+    size_t   leafTreeSize = 0;
+
     CbImpl *impl = NULL;
 
     if (false
         || (arena = cbArenaCtor()) == NULL
-        || (size = cbParseNode(&text, arena, &node)) == 0
+        || (treeSize = cbParseNode(&text, arena, &treeRoot, &leafTreeRoot, &leafTreeSize)) == 0
         || (impl = (CbImpl *)cbArenaAlloc(arena, sizeof(CbImpl))) == NULL
     ) {
         cbArenaDtor(arena);
@@ -329,11 +376,11 @@ bool cbParse( const char *const str, Cb *const dst ) {
 
     impl->arena = arena;
 
-    impl->leafTreeRoot = node;
-    impl->leafTreeSize = 0; // not constructed yet
+    impl->leafTreeRoot = leafTreeRoot;
+    impl->leafTreeSize = leafTreeSize;
 
-    impl->treeRoot = node;
-    impl->treeSize = size;
+    impl->treeRoot = treeRoot;
+    impl->treeSize = treeSize;
 
     *dst = impl;
 
@@ -363,12 +410,90 @@ void cbDumpNodeDot( FILE *out, const CbNode *node, size_t *const nodeId ) {
 } // cbDumpNodeDot
 
 void cbDumpDot( FILE *out, const Cb self ) {
-    size_t nodeId = 0;
+    size_t nodeId = 1;
 
     fprintf(out, "digraph {\n");
     cbDumpNodeDot(out, self->treeRoot, &nodeId);
     fprintf(out, "}");
-
 } // cbDumpDot
+
+/**
+ * @brief leaf tree node dumping in dot format function
+ * 
+ * @param[in,out] out    output file
+ * @param[in]     node   node to dump
+ * @param[in,out] nodeId last node identifier
+ */
+static void cbDbgLeafTreeNodeDumpDot( FILE *const out, const CbNode *const node, size_t *const nodeId ) {
+    assert(node != NULL);
+    assert(nodeId != NULL);
+    assert(node->isLeaf); // ?
+
+    const size_t currentId = (*nodeId)++;
+
+    fprintf(out, "    node%zu [label = \"%s\"];\n", currentId, node->text);
+
+    if (node->leaf.left != NULL) {
+        const size_t id = *nodeId;
+        cbDbgLeafTreeNodeDumpDot(out, node->leaf.left, nodeId);
+        fprintf(out, "    node%zu -> node%zu [label = \"L\"];\n", currentId, id);
+    }
+
+    if (node->leaf.right != NULL) {
+        const size_t id = *nodeId;
+        cbDbgLeafTreeNodeDumpDot(out, node->leaf.right, nodeId);
+        fprintf(out, "    node%zu -> node%zu [label = \"R\"];\n", currentId, id);
+    }
+} // cbDbgLeafTreeNodeDumpDot
+
+void cbDbgLeafTreeDumpDot( FILE *out, const Cb self ) {
+    assert(self != NULL);
+
+    size_t nodeId = 1;
+
+    fprintf(out, "digraph {\n");
+    cbDbgLeafTreeNodeDumpDot(out, self->leafTreeRoot, &nodeId);
+    fprintf(out, "}");
+} // cbDbgLeafTreeDumpDot
+
+CbDefineStatus cbDefine( const Cb self, const char *subject, CbDefIter *dst ) {
+    const CbNode *node = *cbLeafTreeFind(&self->leafTreeRoot, subject);
+
+    if (node == NULL)
+        return CB_DEFINE_STATUS_NO_SUBJECT;
+
+    if (dst != NULL)
+        *dst = (CbDefIter) { .element = node };
+
+    return node->parent == NULL
+        ? CB_DEFINE_STATUS_NO_DEFINITION
+        : CB_DEFINE_STATUS_OK;
+} // cbDefine
+
+const char * cbDefIterGetProperty( const CbDefIter *iter ) {
+    assert(iter != NULL);
+    assert(iter->element != NULL);
+    assert(iter->element->parent != NULL);
+
+    return iter->element->parent->text;
+} // cbDefIterGetProperty
+
+bool cbDefIterGetRelation( const CbDefIter *iter ) {
+    assert(iter != NULL);
+    assert(iter->element != NULL);
+    assert(iter->element->parent != NULL);
+
+    return iter->element->parent->interior.correct == iter->element;
+} // cbDefIterGetRelation
+
+bool cbDefIterNext( CbDefIter *iter ) {
+    assert(iter != NULL);
+    assert(iter->element != NULL);
+    assert(iter->element->parent != NULL);
+
+    iter->element = iter->element->parent;
+
+    return iter->element->parent != NULL;
+} // cbDefIterNext
 
 // cb.c

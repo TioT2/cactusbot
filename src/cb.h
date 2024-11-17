@@ -82,6 +82,58 @@ bool cbIterFinished( const CbIter *entry );
  */
 bool cbIterInsertCorrect( CbIter *entry, const char *condition, const char *correct );
 
+/// @brief object definition iterator representation structure
+typedef struct __CbDefIter {
+    const struct __CbNode *element; ///< element
+} CbDefIter;
+
+/// @brief object definition status
+typedef enum __CbDefineStatus {
+    CB_DEFINE_STATUS_OK,            ///< successfully created defIter
+    CB_DEFINE_STATUS_NO_SUBJECT,    ///< no defined subject in definition database
+    CB_DEFINE_STATUS_NO_DEFINITION, ///< no definition exists for the subject
+} CbDefineStatus;
+
+/**
+ * @brief definition iterator getting function
+ * 
+ * @param[in]  self    cb pointer (non-null)
+ * @param[in]  subject subject to defint name
+ * @param[out] dst     iterator destination (nullable)
+ * 
+ * @return definition status
+ * 
+ * @note it's ok to use dst contents if functions returns CB_DEFINE_STATUS_OK.
+ */
+CbDefineStatus cbDefine( const Cb self, const char *subject, CbDefIter *dst );
+
+/**
+ * @brief next property getting function
+ * 
+ * @param[in,out] iter iterator to get next element of (non-null, not finished)
+ * 
+ * @return next property text. NULL if definition finished.
+ */
+const char * cbDefIterGetProperty( const CbDefIter *iter );
+
+/**
+ * @brief relation to next property getting function
+ * 
+ * @param[in] iter iterator to get relation to next property of (non-null, not finished)
+ * 
+ * @return true if defined object satisfies property got from cbDefIterGetProperty function.
+ */
+bool cbDefIterGetRelation( const CbDefIter *iter );
+
+/**
+ * @brief next property getting function
+ * 
+ * @param[in] iter iterator (non-null, not finished)
+ * 
+ * @return true if it's ok to continue definition iteration by iter, false if not.
+ */
+bool cbDefIterNext( CbDefIter *iter );
+
 /**
  * @brief CF dot text dumping function
  * 
@@ -107,6 +159,18 @@ void cbDump( FILE *out, const Cb self );
  * @return true if parsed, false if not.
  */
 bool cbParse( const char *str, Cb *dst );
+
+/***
+ * Debug functions
+ ***/
+
+/**
+ * @brief leaf tree in dot format dumping function
+ * 
+ * @param[in,out] out output file
+ * @param[in]     cb  cb to dump
+ */
+void cbDbgLeafTreeDumpDot( FILE *out, const Cb cb );
 
 #ifdef __cplusplus
 }
