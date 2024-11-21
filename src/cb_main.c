@@ -12,71 +12,17 @@
 
 #include "cb.h"
 
-bool startsWith( const char *str, const char *start ) {
+/**
+ * @brief string start comparison function
+ * 
+ * @param[in] str   string to compare start of
+ * @param[in] start start to check
+ * 
+ * @return true if 'str' starts from 'start', false if not
+ */
+static bool startsWith( const char *str, const char *start ) {
     return strncmp(str, start, strlen(start)) == 0;
-}
-
-bool utf8StrNextChar( const char **str, uint32_t *charDst ) {
-    *charDst = 0;
-
-    int8_t *dst = (int8_t *)charDst;
-
-    dst[0] = *(*str)++;
-
-    if (dst[0] == '\0')
-        return true;
-
-    // 1 char
-    if ((dst[0] & 0x80) == 0x00)
-        return true;
-
-    // 2 chars
-    if ((dst[0] & 0xE0) == 0xC0) {
-        dst[1] = *(*str)++;
-
-        return true
-            && (dst[1] & 0xC0) == 0x80;
-    }
-
-    // 3 chars
-    if ((dst[0] & 0xF0) == 0xE0) {
-        dst[1] = *(*str)++;
-        dst[2] = *(*str)++;
-        return true
-            && (dst[1] & 0xC0) == 0x80
-            && (dst[2] & 0xC0) == 0x80
-        ;
-    }
-
-    // 4 chars
-    if ((dst[0] & 0xF1) == 0xF0) {
-        dst[1] = *(*str)++;
-        dst[2] = *(*str)++;
-        dst[3] = *(*str)++;
-        return true
-            && (dst[1] & 0xC0) == 0x80
-            && (dst[2] & 0xC0) == 0x80
-            && (dst[3] & 0xC0) == 0x80
-        ;
-    }
-
-    return false;
-}
-
-bool utf8StrLength( const char *str, size_t *dst ) {
-    uint32_t ch = 0;
-    size_t len = 0;
-
-    for (;;) {
-        if (!utf8StrNextChar(&str, &ch))
-            return false;
-        if (ch == 0) {
-            *dst = len;
-            return true;
-        }
-        len++;
-    }
-}
+} // startsWith
 
 /**
  * @brief help printing function
@@ -98,7 +44,8 @@ void cliPrintHelp( void ) {
  */
 void cliPrintDbgHelp( void ) {
     puts(
-        "    сохранитьЛистовоеДерево - сохранить внутреннее дерево, построенное для оптимизации поиска листьев, в файл.\n"
+        "    сохранитьЛистовоеДерево - сохранить внутреннее дерево, построенное для оптимизации поиска листьев, в файл в формате dot.\n"
+        "    сохранитьДерево         - сохранить основное дерево в файл в формате dot.\n"
     );
 } // cliPrintDbgHelp
 
@@ -126,6 +73,11 @@ FILE * cliOpenFile( const char *mode ) {
     return file;
 } // cliOpenFile
 
+/**
+ * @brief main project function
+ * 
+ * @return exit status
+ */
 int main( void ) {
     Cb cb = cbCtor("пустота");
 
@@ -148,33 +100,12 @@ int main( void ) {
 
         if (startsWith(commandBuffer, "сохранить")) {
             char buffer[512] = {0};
-            bool isDot = false;
-
-            printf("    Формат? ([c]b, [d]ot) ");
-            fgets(buffer, sizeof(buffer), stdin);
-
-            if (buffer[0] == 'c') {
-                isDot = false;
-            } else if (buffer[0] == 'd') {
-                isDot = true;
-            } else {
-                const size_t len = strlen(buffer);
-                if (len > 0)
-                    buffer[len - 1] = '\0';
-
-                printf("    неизвестный формат: %s", buffer);
-                continue;
-            }
 
             FILE *file = cliOpenFile("w");
             if (file == NULL)
                 continue;
 
-            if (isDot) {
-                cbDumpDot(file, cb);
-            } else {
-                cbDump(file, cb);
-            }
+            cbDump(file, cb);
             fclose(file);
 
             continue;
@@ -241,8 +172,13 @@ int main( void ) {
                 printf("Потому что он/она/оно ...? ");
                 fgets(conditionBuffer, sizeof(conditionBuffer), stdin);
 
-                sessionBuffer[strlen(sessionBuffer) - 1] = '\0';
-                conditionBuffer[strlen(conditionBuffer) - 1] = '\0';
+                const size_t sessionBufferLength = strlen(sessionBuffer);
+                if (sessionBufferLength != 0)
+                    sessionBuffer[strlen(sessionBuffer) - 1] = '\0';
+
+                const size_t conditionBufferLength = strlen(conditionBuffer);
+                if (conditionBufferLength != 0)
+                    conditionBuffer[strlen(conditionBuffer) - 1] = '\0';
 
                 if (!cbIterInsertCorrect(&iter, conditionBuffer, sessionBuffer)) {
                     printf("Произошла внутренняя ошибка...\n");
@@ -270,7 +206,7 @@ int main( void ) {
             case CB_DEFINE_STATUS_OK: {
                 bool first = true;
 
-                printf("    %s - это то, что ");
+                printf("    %s - это то/тот/та/те, что есть ", buffer);
 
                 do {
                     printf("%s%s%s",
@@ -311,6 +247,12 @@ int main( void ) {
                     continue;
                 cbDbgLeafTreeDumpDot(file, cb);
                 fclose(file);
+            } else if (startsWith(commandBuffer + 1, "сохранитьДерево")) {
+                FILE *file = cliOpenFile("w");
+                if (file == NULL)
+                    continue;
+                cbDbgDumpDot(file, cb);
+                fclose(file);
             } else {
                 cliPrintDbgHelp();
             }
@@ -326,5 +268,79 @@ int main( void ) {
 
     return 0;
 } // main
+
+// unused functions that may become too useful to be completely deleted from project
+#if 0
+
+/**
+ * @brief single UTF-8 character from byte array to UTF-32 format decoding function
+ * 
+ * @param[in] str     array to decode character from pointer
+ * @param[in] charDst character decoding destination
+ * 
+ * @return true if decoded, false if not
+ */
+bool utf8StrNextChar( const char **str, uint32_t *charDst ) {
+    *charDst = 0;
+
+    int8_t *dst = (int8_t *)charDst;
+
+    dst[0] = *(*str)++;
+
+    if (dst[0] == '\0')
+        return true;
+
+    // 1 char
+    if ((dst[0] & 0x80) == 0x00)
+        return true;
+
+    // 2 chars
+    if ((dst[0] & 0xE0) == 0xC0) {
+        dst[1] = *(*str)++;
+
+        return true
+            && (dst[1] & 0xC0) == 0x80;
+    }
+
+    // 3 chars
+    if ((dst[0] & 0xF0) == 0xE0) {
+        dst[1] = *(*str)++;
+        dst[2] = *(*str)++;
+        return true
+            && (dst[1] & 0xC0) == 0x80
+            && (dst[2] & 0xC0) == 0x80
+        ;
+    }
+
+    // 4 chars
+    if ((dst[0] & 0xF1) == 0xF0) {
+        dst[1] = *(*str)++;
+        dst[2] = *(*str)++;
+        dst[3] = *(*str)++;
+        return true
+            && (dst[1] & 0xC0) == 0x80
+            && (dst[2] & 0xC0) == 0x80
+            && (dst[3] & 0xC0) == 0x80
+        ;
+    }
+
+    return false;
+} // utf8StrNextChar
+
+bool utf8StrLength( const char *str, size_t *dst ) {
+    uint32_t ch = 0;
+    size_t len = 0;
+
+    for (;;) {
+        if (!utf8StrNextChar(&str, &ch))
+            return false;
+        if (ch == 0) {
+            *dst = len;
+            return true;
+        }
+        len++;
+    }
+} // utf8StrLength
+#endif
 
 // cb_main.c

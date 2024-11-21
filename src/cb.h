@@ -135,14 +135,6 @@ bool cbDefIterGetRelation( const CbDefIter *iter );
 bool cbDefIterNext( CbDefIter *iter );
 
 /**
- * @brief CF dot text dumping function
- * 
- * @param[out] out  destination file
- * @param[in]  self self pointer
- */
-void cbDumpDot( FILE *out, const Cb self );
-
-/**
  * @brief CF text dumping function
  * 
  * @param[out] out  destination file
@@ -163,6 +155,14 @@ bool cbParse( const char *str, Cb *dst );
 /***
  * Debug functions
  ***/
+
+/**
+ * @brief CF dot text dumping function
+ * 
+ * @param[out] out  destination file
+ * @param[in]  self self pointer
+ */
+void cbDbgDumpDot( FILE *out, const Cb self );
 
 /**
  * @brief leaf tree in dot format dumping function

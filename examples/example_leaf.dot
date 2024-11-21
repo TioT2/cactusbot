@@ -1,9 +1,0 @@
-digraph {
-    node1 [label = "фопф"];
-    node2 [label = "луна"];
-    node3 [label = "полторашка"];
-    node4 [label = "пустота"];
-    node3 -> node4 [label = "L"];
-    node2 -> node3 [label = "L"];
-    node1 -> node2 [label = "R"];
-}

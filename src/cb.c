@@ -218,17 +218,26 @@ void cbDump( FILE *out, const Cb self ) {
     cbDumpNode(out, self->treeRoot, 0);
 } // cbDump
 
+/// @brief token type enumeration
 typedef enum __CbTokenType {
     CB_TOKEN_LEFT_BRACKET,  ///< (
     CB_TOKEN_RIGHT_BRACKET, ///< )
     CB_TOKEN_STRING,        ///< "<smth>"
 } CbTokenType;
 
+/// @brief token contents
 typedef struct __CbToken {
     CbTokenType type;   ///< token type
     CbStr       string; ///< string (if token type is CB_TOKEN_STRING). actually, this structure is tagged union.
 } CbToken;
 
+/**
+ * @brief checking for character is space function
+ * 
+ * @param[in] ch character to check
+ * 
+ * @return true if character is space, false if not.
+ */
 static bool cbIsSpace( const char ch ) {
     return false
         || ch == ' '
@@ -387,35 +396,34 @@ bool cbParse( const char *const str, Cb *const dst ) {
     return true;
 } // cbParse
 
-void cbDumpNodeDot( FILE *out, const CbNode *node, size_t *const nodeId ) {
-    const size_t currId = (*nodeId)++;
-
-    fprintf(out, "    node%zu [label = \"%s", currId, node->text);
-    if (node->isLeaf)
-        fprintf(out, "\", shape = box");
-    else
-        fprintf(out, "?\"");
-    fprintf(out, "];\n");
+void cbDbgDumpNodeDot( FILE *out, const CbNode *node ) {
+    fprintf(out, "    node%016zX [label = \"{<location>location: 0x%016zX|<text>text: \\\"%s\\\"|<isLeaf> isLeaf: %s}\"];\n",
+        (size_t)node,
+        (size_t)node,
+        node->text,
+        node->isLeaf
+            ? "true"
+            : "false"
+    );
 
     if (!node->isLeaf) {
-        const size_t correctId = *nodeId;
-        cbDumpNodeDot(out, node->interior.correct, nodeId);
+        cbDbgDumpNodeDot(out, node->interior.correct);
+        cbDbgDumpNodeDot(out, node->interior.incorrect);
 
-        const size_t incorrectId = *nodeId;
-        cbDumpNodeDot(out, node->interior.incorrect, nodeId);
-
-        fprintf(out, "    node%zu -> node%zu [label = \"T\"];\n", currId, correctId);
-        fprintf(out, "    node%zu -> node%zu [label = \"F\"];\n", currId, incorrectId);
+        fprintf(out, "    node%016zX -> node%016zX [label = \"T\"];\n", (size_t)node, (size_t)node->interior.correct);
+        fprintf(out, "    node%016zX -> node%016zX [label = \"F\"];\n", (size_t)node, (size_t)node->interior.incorrect);
     }
-} // cbDumpNodeDot
 
-void cbDumpDot( FILE *out, const Cb self ) {
-    size_t nodeId = 1;
+    fprintf(out, "    node%016zX -> node%016zX [color = \"#00FF00\"]\n", (size_t)node, (size_t)node->parent);
+} // cbDbgDumpNodeDot
 
+void cbDbgDumpDot( FILE *out, const Cb self ) {
     fprintf(out, "digraph {\n");
-    cbDumpNodeDot(out, self->treeRoot, &nodeId);
+    fprintf(out, "    node [shape = record];\n");
+    fprintf(out, "    nodeStat [label = \"{<treeSize>tree size: %zu|<leafTreeSize>leaf tree size: %zu}\"];\n", self->treeSize, self->leafTreeSize);
+    cbDbgDumpNodeDot(out, self->treeRoot);
     fprintf(out, "}");
-} // cbDumpDot
+} // cbDbgDumpDot
 
 /**
  * @brief leaf tree node dumping in dot format function
@@ -424,35 +432,30 @@ void cbDumpDot( FILE *out, const Cb self ) {
  * @param[in]     node   node to dump
  * @param[in,out] nodeId last node identifier
  */
-static void cbDbgLeafTreeNodeDumpDot( FILE *const out, const CbNode *const node, size_t *const nodeId ) {
+static void cbDbgLeafTreeNodeDumpDot( FILE *const out, const CbNode *const node ) {
     assert(node != NULL);
-    assert(nodeId != NULL);
-    assert(node->isLeaf); // ?
+    assert(node->isLeaf);
 
-    const size_t currentId = (*nodeId)++;
-
-    fprintf(out, "    node%zu [label = \"%s\"];\n", currentId, node->text);
+    fprintf(out, "    node%016zX [label = \"{<location>location: %016zX|<text>text: \\\"%s\\\"}\"];\n", (size_t)node, (size_t)node, node->text);
 
     if (node->leaf.left != NULL) {
-        const size_t id = *nodeId;
-        cbDbgLeafTreeNodeDumpDot(out, node->leaf.left, nodeId);
-        fprintf(out, "    node%zu -> node%zu [label = \"L\"];\n", currentId, id);
+        cbDbgLeafTreeNodeDumpDot(out, node->leaf.left);
+        fprintf(out, "    node%016zX -> node%016zX [label = \"L\"];\n", (size_t)node->leaf.left, (size_t)node);
     }
 
     if (node->leaf.right != NULL) {
-        const size_t id = *nodeId;
-        cbDbgLeafTreeNodeDumpDot(out, node->leaf.right, nodeId);
-        fprintf(out, "    node%zu -> node%zu [label = \"R\"];\n", currentId, id);
+        cbDbgLeafTreeNodeDumpDot(out, node->leaf.right);
+        fprintf(out, "    node%016zX -> node%016zX [label = \"R\"];\n", (size_t)node->leaf.right, (size_t)node);
     }
 } // cbDbgLeafTreeNodeDumpDot
 
 void cbDbgLeafTreeDumpDot( FILE *out, const Cb self ) {
     assert(self != NULL);
 
-    size_t nodeId = 1;
-
     fprintf(out, "digraph {\n");
-    cbDbgLeafTreeNodeDumpDot(out, self->leafTreeRoot, &nodeId);
+    fprintf(out, "    node [shape = record];\n");
+    fprintf(out, "    nodeStat [label = \"{<treeSize>tree size: %zu|<leafTreeSize>leaf tree size: %zu}\"];\n", self->treeSize, self->leafTreeSize);
+    cbDbgLeafTreeNodeDumpDot(out, self->leafTreeRoot);
     fprintf(out, "}");
 } // cbDbgLeafTreeDumpDot
 
