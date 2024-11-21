@@ -35,7 +35,8 @@ void cliPrintHelp( void ) {
         "    сохранить  - сохранить дерево в файл \n"
         "    загрузить  - загрузить дерево из файла \n"
         "    начать     - начать проход по дереву \n"
-        "    определить - вывести определение объекта согласно дереву\n"
+        "    очистить   - пересоздать дерево \n"
+        "    определить - вывести определение объекта согласно дереву \n"
     );
 } // cliPrintHelp
 
@@ -186,6 +187,29 @@ int main( void ) {
                 }
             }
 
+
+            continue;
+        }
+
+        if (startsWith(commandBuffer, "очистить")) {
+            char buffer[512] = {0};
+
+            printf("    Изначальный элемент? ");
+            fgets(buffer, sizeof(buffer), stdin);
+
+            const size_t bufferLen = strlen(buffer);
+            if (bufferLen != 0)
+                buffer[bufferLen - 1] = '\0';
+
+            Cb newCb = cbCtor(buffer);
+
+            if (newCb == NULL) {
+                printf("Произошла внутренняя ошибка...");
+                continue;
+            }
+
+            cbDtor(cb);
+            cb = newCb;
 
             continue;
         }
